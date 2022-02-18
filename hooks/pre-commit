@@ -1,0 +1,15 @@
+#!/bin/bash
+
+changed_files=$(git diff --name-only --diff-filter=AM --staged)
+
+if ! command -v clang-format; do
+   echo "Could not find clang-format" >&2
+   exit 1
+fi
+
+for i in ${changed_files}; do
+   if [[ "$i" =~ .*\.(cpp|hpp) ]]; then
+      clang-format -i "$i"
+   fi
+done
+
