@@ -7,6 +7,7 @@
 #include <tuple>
 #include <variant>
 #include <vector>
+#include <limits>
 
 #include <iostream>
 
@@ -442,3 +443,4 @@ int main()
    const auto result = parser.produce_value(dumb_prog);
    (void)value;
 }
+
