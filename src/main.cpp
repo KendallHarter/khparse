@@ -11,6 +11,7 @@
 #include <array>
 #include <functional>
 #include <optional>
+#include <charconv>
 
 template<typename...> struct TD;
 
@@ -62,6 +63,11 @@ concept one_of = (std::same_as<T, Set> || ...);
 
 template<typename First, typename... Rest>
 using head_type = First;
+
+template<typename T>
+concept base_parser = requires(const T& parser, std::string_view str) {
+   { parser.parse(str) } -> std::same_as<parse_result>;
+};
 
 template<typename T>
 concept wrapable_parser = requires(const T& parser, std::string_view str) {
@@ -256,6 +262,39 @@ concept or_bindable = requires(const Callable& c, const std::variant<typename Pa
 };
 // clang-format on
 
+struct number {
+   using result_type = std::int64_t;
+
+   constexpr number(int base) noexcept
+      : base_{base}
+   {}
+
+   parse_result parse(std::string_view v) const noexcept
+   {
+      std::int64_t value;
+      const auto [ptr, ec] = std::from_chars(v.begin(), v.data() + v.size(), value, base_);
+      if (ec != std::errc{}) {
+         if (ec == std::errc::invalid_argument) {
+            return parse_failure{"Could not parse number", v.data()};
+         }
+         else if (ec == std::errc::result_out_of_range) {
+            return parse_failure{"Number too large", v.data()};
+         }
+         else {
+            return parse_failure{"Unknown error", v.data()};
+         }
+      }
+      return parse_success{value, ptr};
+   }
+
+private:
+   int base_;
+};
+
+inline constexpr auto hex_number = number{16};
+inline constexpr auto dec_number = number{10};
+inline constexpr auto bin_number = number{2};
+
 // This should probably be a function with the callable passed in since we're
 // always going to want to bind it (it is rather useless otherwise)
 constexpr auto seq = []<wrapable_parser... Parsers>(wrapable_parser auto&& skipper, seq_bindable<Parsers...> auto&& binder, Parsers&&... parsers) -> parser {
@@ -365,6 +404,10 @@ constexpr auto or_ = []<wrapable_parser... Parsers>(or_bindable<Parsers...> auto
    return or_parser{static_cast<decltype(binder)&&>(binder), {static_cast<Parsers&&>(parsers)...}, ""};
 };
 
+inline constexpr auto make_final_parser = [](base_parser auto&& skipper, base_parser auto&&... parsers) -> base_parser auto {
+   return seq([](auto...){}, static_cast<decltype(skipper)&&>(skipper), static_cast<decltype(parsers)&&>(parsers)...);
+};
+
 int main()
 {
    parser p{char_{}};
@@ -375,4 +418,5 @@ int main()
    heck.parse("abbbbbc");
    heck2.parse("a");
    heck2.parse("b");
+   // const auto test = make_final_parser()
 }
