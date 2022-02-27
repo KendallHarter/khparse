@@ -418,5 +418,4 @@ int main()
    heck.parse("abbbbbc");
    heck2.parse("a");
    heck2.parse("b");
-   // const auto test = make_final_parser()
 }
