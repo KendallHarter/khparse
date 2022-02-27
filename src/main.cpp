@@ -1,24 +1,26 @@
+#include <array>
+#include <bitset>
 #include <cassert>
+#include <charconv>
+#include <concepts>
 #include <cstdint>
+#include <cstring>
+#include <functional>
+#include <iostream>
+#include <optional>
 #include <string_view>
 #include <type_traits>
-#include <vector>
 #include <variant>
-#include <concepts>
-#include <bitset>
-#include <iostream>
-#include <cstring>
-#include <array>
-#include <functional>
-#include <optional>
-#include <charconv>
+#include <vector>
 
-template<typename...> struct TD;
+template<typename...>
+struct TD;
 
 struct nil_t {};
 inline constexpr nil_t nil{};
 
-using parse_value = std::variant<nil_t, char, std::int64_t, std::string_view, std::vector<std::int64_t>, std::vector<std::string_view>>;
+using parse_value = std::
+   variant<nil_t, char, std::int64_t, std::string_view, std::vector<std::int64_t>, std::vector<std::string_view>>;
 
 struct parse_success {
    parse_value value;
@@ -85,7 +87,7 @@ struct sequence_result<T...>
 {
    using type = nil_t;
 };
-   
+
 // clang-format on
 
 struct char_ {
@@ -97,15 +99,9 @@ struct char_ {
       allowed.flip();
    }
 
-   char_(unsigned char c) noexcept
-   {
-      allowed[c] = true;
-   }
+   char_(unsigned char c) noexcept { allowed[c] = true; }
 
-   char_(std::string_view init_string) noexcept
-   {
-      handle_init(init_string);
-   }
+   char_(std::string_view init_string) noexcept { handle_init(init_string); }
 
    parse_result parse(std::string_view str) const noexcept
    {
@@ -144,32 +140,23 @@ private:
    std::bitset<256> allowed;
 };
 
-struct always_succeed_t
-{
+struct always_succeed_t {
    using result_type = nil_t;
 
-   parse_result parse(std::string_view str) const noexcept
-   {
-      return parse_success{nil, str.data()};
-   }
+   parse_result parse(std::string_view str) const noexcept { return parse_success{nil, str.data()}; }
 };
 
-struct always_fail_t
-{
+struct always_fail_t {
    using result_type = nil_t;
 
-   parse_result parse(std::string_view str) const noexcept
-   {
-      return parse_failure{str.data(), "always_fail::parse"};
-   }
+   parse_result parse(std::string_view str) const noexcept { return parse_failure{str.data(), "always_fail::parse"}; }
 };
 
 inline constexpr always_succeed_t always_succeed{};
 inline constexpr always_fail_t always_fail{};
 
 // Don't allow unbound variant/sequence in variant/sequence because that makes things complicated
-struct parser
-{
+struct parser {
 public:
    template<wrapable_parser T>
    parser(T&& base_parser) noexcept
@@ -203,7 +190,7 @@ public:
 
 private:
    inline static constexpr auto is_dynamic_bit = 1ull << (sizeof(void*) * 8 - 1);
-   
+
    template<typename T>
    static void* make_storage(T&& base_parser) noexcept
    {
@@ -236,10 +223,7 @@ private:
       return is_dynamic ? ptr | is_dynamic_bit : ptr;
    }
 
-   bool is_dynamic() const noexcept
-   {
-      return parse_impl_ & is_dynamic_bit;
-   }
+   bool is_dynamic() const noexcept { return parse_impl_ & is_dynamic_bit; }
 
    using parse_ptr = parse_result (*)(const void*, std::string_view);
    using delete_ptr = void (*)(void*, bool);
@@ -265,9 +249,7 @@ concept or_bindable = requires(const Callable& c, const std::variant<typename Pa
 struct number {
    using result_type = std::int64_t;
 
-   constexpr number(int base) noexcept
-      : base_{base}
-   {}
+   constexpr number(int base) noexcept : base_{base} {}
 
    parse_result parse(std::string_view v) const noexcept
    {
@@ -297,7 +279,10 @@ inline constexpr auto bin_number = number{2};
 
 // This should probably be a function with the callable passed in since we're
 // always going to want to bind it (it is rather useless otherwise)
-constexpr auto seq = []<wrapable_parser... Parsers>(wrapable_parser auto&& skipper, seq_bindable<Parsers...> auto&& binder, Parsers&&... parsers) -> parser {
+constexpr auto seq =
+   []<wrapable_parser... Parsers>(
+      wrapable_parser auto&& skipper, seq_bindable<Parsers...> auto&& binder, Parsers&&... parsers) -> parser
+{
    struct seq_parser {
       std::remove_cvref_t<decltype(skipper)> skipper_;
       std::remove_cvref_t<decltype(binder)> binder_;
@@ -315,7 +300,9 @@ constexpr auto seq = []<wrapable_parser... Parsers>(wrapable_parser auto&& skipp
          data_type call_data;
 
          auto handle_parser = [&]<std::size_t I>() {
-            if (!last_result) { return; }
+            if (!last_result) {
+               return;
+            }
 
             while (true) {
                const auto loc_raw = skipper_.parse({last_result, str.end()});
@@ -338,9 +325,8 @@ constexpr auto seq = []<wrapable_parser... Parsers>(wrapable_parser auto&& skipp
             }
          };
 
-         [&]<std::size_t... I>(std::index_sequence<I...>) {
-            (handle_parser.template operator()<I>(), ...);
-         }(std::index_sequence_for<Parsers...>{});
+         [&]<std::size_t... I>(std::index_sequence<I...>) { (handle_parser.template operator()<I>(), ...); }
+         (std::index_sequence_for<Parsers...>{});
 
          if (last_result) {
             std::apply(binder_, call_data);
@@ -349,10 +335,15 @@ constexpr auto seq = []<wrapable_parser... Parsers>(wrapable_parser auto&& skipp
          return to_ret;
       }
    };
-   return seq_parser{static_cast<decltype(skipper)&&>(skipper), static_cast<decltype(binder)&&>(binder), std::forward_as_tuple(static_cast<Parsers&&>(parsers)...)};
+   return seq_parser{
+      static_cast<decltype(skipper)&&>(skipper),
+      static_cast<decltype(binder)&&>(binder),
+      std::forward_as_tuple(static_cast<Parsers&&>(parsers)...)};
 };
 
-constexpr auto or_ = []<wrapable_parser... Parsers>(or_bindable<Parsers...> auto&& binder, Parsers&&... parsers) -> parser {
+constexpr auto or_ =
+   []<wrapable_parser... Parsers>(or_bindable<Parsers...> auto&& binder, Parsers&&... parsers) -> parser
+{
    struct or_parser {
       std::remove_cvref_t<decltype(binder)> binder_;
       std::tuple<Parsers...> parsers_;
@@ -361,7 +352,7 @@ constexpr auto or_ = []<wrapable_parser... Parsers>(or_bindable<Parsers...> auto
       // the [[maybe_unused]] is to prevent false positive warnings
       using result_type [[maybe_unused]] = nil_t;
 
-      parse_result parse(std::string_view str) const & noexcept
+      parse_result parse(std::string_view str) const& noexcept
       {
          using data_type = std::variant<typename Parsers::result_type...>;
          std::optional<data_type> call_data;
@@ -369,11 +360,14 @@ constexpr auto or_ = []<wrapable_parser... Parsers>(or_bindable<Parsers...> auto
          std::string temp_err_str;
 
          auto handle_parser = [&]<std::size_t I>() {
-            if (call_data) { return; }
-            
+            if (call_data) {
+               return;
+            }
+
             auto result = std::get<I>(parsers_).parse(str);
             if (const auto res = std::get_if<parse_success>(&result)) {
-               call_data = data_type{std::in_place_index<I>, *std::get_if<std::variant_alternative_t<I, data_type>>(&res->value)};
+               call_data = data_type{
+                  std::in_place_index<I>, *std::get_if<std::variant_alternative_t<I, data_type>>(&res->value)};
                res->value = nil;
                to_ret = *res;
             }
@@ -385,9 +379,8 @@ constexpr auto or_ = []<wrapable_parser... Parsers>(or_bindable<Parsers...> auto
             }
          };
 
-         [&]<std::size_t... I>(std::index_sequence<I...>) {
-            (handle_parser.template operator()<I>(), ...);
-         }(std::index_sequence_for<Parsers...>{});
+         [&]<std::size_t... I>(std::index_sequence<I...>) { (handle_parser.template operator()<I>(), ...); }
+         (std::index_sequence_for<Parsers...>{});
 
          if (!call_data) {
             err_str = temp_err_str;
@@ -400,12 +393,14 @@ constexpr auto or_ = []<wrapable_parser... Parsers>(or_bindable<Parsers...> auto
          return to_ret;
       }
    };
-   
+
    return or_parser{static_cast<decltype(binder)&&>(binder), {static_cast<Parsers&&>(parsers)...}, ""};
 };
 
-inline constexpr auto make_final_parser = [](base_parser auto&& skipper, base_parser auto&&... parsers) -> base_parser auto {
-   return seq([](auto...){}, static_cast<decltype(skipper)&&>(skipper), static_cast<decltype(parsers)&&>(parsers)...);
+inline constexpr auto make_final_parser =
+   [](base_parser auto&& skipper, base_parser auto&&... parsers) -> base_parser auto
+{
+   return seq([](auto...) {}, static_cast<decltype(skipper)&&>(skipper), static_cast<decltype(parsers)&&>(parsers)...);
 };
 
 int main()
@@ -413,7 +408,8 @@ int main()
    parser p{char_{}};
    const auto val = p.parse("hi");
    std::cout << std::get<char>(std::get<parse_success>(val).value) << '\n';
-   const auto heck = seq(char_{'b'}, [](char a, char b){ std::cout << a << ' ' << b << '\n'; }, char_{}, char_{});
+   const auto heck = seq(
+      char_{'b'}, [](char a, char b) { std::cout << a << ' ' << b << '\n'; }, char_{}, char_{});
    const auto heck2 = or_([](auto v) { std::cout << v.index() << '\n'; }, char_{'a'}, char_{'b'});
    heck.parse("abbbbbc");
    heck2.parse("a");

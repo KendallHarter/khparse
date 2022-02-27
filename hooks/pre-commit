@@ -2,7 +2,7 @@
 
 changed_files=$(git diff --name-only --diff-filter=AM --staged)
 
-if ! command -v clang-format; do
+if ! command -v clang-format; then
    echo "Could not find clang-format" >&2
    exit 1
 fi
