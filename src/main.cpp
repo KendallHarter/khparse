@@ -260,7 +260,7 @@ int main()
     )">;
    static_assert(rule[0].name == "hi");
    static_assert(rule[0].num_def_entities == 4);
-   static_assert(rule[1].name == "borzoi");
+   static_assert(rule[1].name == "borzoi"); 
    static_assert(rule[1].num_def_entities == 3);
    static_assert(rule[2].name == "test");
    static_assert(rule[2].num_def_entities == 2);
