@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cassert>
+#include <climits>
 #include <compare>
 #include <cstddef>
 #include <cstdint>
@@ -7,7 +8,6 @@
 #include <iterator>
 #include <string_view>
 #include <type_traits>
-#include <climits>
 
 template<std::size_t N>
 struct comp_str {
@@ -182,7 +182,9 @@ constexpr auto find_rule(std::string_view v) -> const_expected<std::pair<rule_st
 }
 
 template<comp_str line, comp_str why>
-struct error { void fail(); };
+struct error {
+   void fail();
+};
 
 template<comp_str str>
 constexpr auto decompose_rules_impl()
@@ -220,10 +222,11 @@ constexpr auto decompose_rules_impl()
    }
    else {
       constexpr auto err_info = num_rules_and_rules.error();
-      constexpr auto line_and_err = [&]() constexpr {
+      constexpr auto line_and_err = [&]() constexpr
+      {
          // Create line of error
          constexpr auto mri = [](auto val) { return std::make_reverse_iterator(val); };
-         constexpr auto null_or_newline = [](char c){return c == '\n' || c == '\0'; };
+         constexpr auto null_or_newline = [](char c) { return c == '\n' || c == '\0'; };
          constexpr auto start_line_loc = std::find_if(mri(err_info.where), mri(v.begin()), null_or_newline).base();
          constexpr auto end_line_loc = std::find_if(err_info.where, v.end(), null_or_newline);
          std::array<char, std::distance(start_line_loc, end_line_loc)> line;
@@ -238,7 +241,8 @@ constexpr auto decompose_rules_impl()
             why[i] = err_info.why[i];
          }
          return std::make_pair(line, why);
-      }();
+      }
+      ();
       error<line_and_err.first, line_and_err.second>{}.fail();
       return std::array<rule_str, 1>{{}};
    }
@@ -260,7 +264,7 @@ int main()
    static_assert(rule[1].num_def_entities == 3);
    static_assert(rule[2].name == "test");
    static_assert(rule[2].num_def_entities == 2);
-   
+
    constexpr auto rules = decompose_rules<R"ebnf(
       letter = [a-zA-Z] ;
       digit = [0-9] ;
