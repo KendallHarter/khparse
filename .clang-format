@@ -47,7 +47,7 @@ BreakBeforeBinaryOperators: All
 BreakBeforeBraces: Custom
 BreakBeforeInheritanceComma: false
 BreakInheritanceList: BeforeComma
-BreakBeforeConceptDeclarations: Always
+BreakBeforeConceptDeclarations: True
 BreakBeforeTernaryOperators: true
 BreakConstructorInitializersBeforeComma: false
 BreakConstructorInitializers: BeforeComma
