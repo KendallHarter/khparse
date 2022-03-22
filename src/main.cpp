@@ -73,7 +73,12 @@ public:
 
    constexpr operator T() const noexcept { return value(); }
 
-   constexpr E error() const noexcept { return error_; }
+   constexpr E error() const { 
+      if (has_value_) {
+         throw "Error retrived when there was no error";
+      }
+      return error_; 
+   }
 
    constexpr explicit operator bool() const noexcept { return has_value_; }
 
@@ -250,6 +255,76 @@ constexpr auto decompose_rules_impl()
 
 template<comp_str str>
 inline constexpr auto decompose_rules = decompose_rules_impl<str>();
+
+template<typename T>
+struct parse_success {
+   const char* rest;
+   T value;
+};
+
+struct parse_failure {
+   const char* where;
+   const char* why;
+}
+
+struct char_ {
+   using result_type = char;
+
+   constexpr char_() noexcept
+      : allowed{{true}}
+   {}
+
+   constexpr char_(unsigned char c) noexcept 
+      : allowed{{false}}
+   { allowed[c] = true; }
+
+   constexpr char_(std::string_view init_string) noexcept 
+      : allowed{{false}}
+   { 
+      constexpr auto unescape = [&](unsigned char c) -> unsigned char {
+         switch (c) {
+            case '\'': return '\'';
+            case '"':  return '\"';
+            case '?':  return '\?';
+            case '\\': return '\\';
+            case 'a':  return '\a';
+            case 'b':  return '\b';
+            case 'f':  return '\f';
+            case 'n':  return '\n';
+            case 'r':  return '\r';
+            case 't':  return '\t';
+            case 'v':  return '\v';
+            case ']':  return ']';
+            // TODO: \NNN and \xNN
+            default:   throw "Invalid escape character";
+         };
+      };
+      for (const char* cur = init_string.data(); cur != init_string.end();) {
+         if (*cur == '\\') {
+            allowed[unescape(cur[1])] = true;
+            cur += 2;
+         }
+         else if (cur[1] == '-') {
+            for (unsigned char c = cur[0]; c <= cur[2]; ++c) {
+               allowed[c] = true;
+            }
+            cur += 3;
+         }
+         else {
+            allowed[static_cast<unsigned char>(*cur)] = true;
+            ++cur;
+         }
+      }
+   }
+
+   constexpr bool parse(unsigned char c) const noexcept
+   {
+      return allowed[c];
+   }
+
+private:
+   std::array<bool, 256> allowed;
+};
 
 int main()
 {
