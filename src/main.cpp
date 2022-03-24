@@ -265,7 +265,7 @@ struct parse_success {
 struct parse_failure {
    const char* where;
    const char* why;
-}
+};
 
 struct char_ {
    using result_type = char;
