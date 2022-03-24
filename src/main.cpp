@@ -73,11 +73,12 @@ public:
 
    constexpr operator T() const noexcept { return value(); }
 
-   constexpr E error() const { 
+   constexpr E error() const
+   {
       if (has_value_) {
          throw "Error retrived when there was no error";
       }
-      return error_; 
+      return error_;
    }
 
    constexpr explicit operator bool() const noexcept { return has_value_; }
@@ -270,33 +271,41 @@ struct parse_failure {
 struct char_ {
    using result_type = char;
 
-   constexpr char_() noexcept
-      : allowed{{true}}
-   {}
+   constexpr char_() noexcept : allowed{{true}} {}
 
-   constexpr char_(unsigned char c) noexcept 
-      : allowed{{false}}
-   { allowed[c] = true; }
+   constexpr char_(unsigned char c) noexcept : allowed{{false}} { allowed[c] = true; }
 
-   constexpr char_(std::string_view init_string) noexcept 
-      : allowed{{false}}
-   { 
+   constexpr char_(std::string_view init_string) noexcept : allowed{{false}}
+   {
       constexpr auto unescape = [&](unsigned char c) -> unsigned char {
          switch (c) {
-            case '\'': return '\'';
-            case '"':  return '\"';
-            case '?':  return '\?';
-            case '\\': return '\\';
-            case 'a':  return '\a';
-            case 'b':  return '\b';
-            case 'f':  return '\f';
-            case 'n':  return '\n';
-            case 'r':  return '\r';
-            case 't':  return '\t';
-            case 'v':  return '\v';
-            case ']':  return ']';
-            // TODO: \NNN and \xNN
-            default:   throw "Invalid escape character";
+         case '\'':
+            return '\'';
+         case '"':
+            return '\"';
+         case '?':
+            return '\?';
+         case '\\':
+            return '\\';
+         case 'a':
+            return '\a';
+         case 'b':
+            return '\b';
+         case 'f':
+            return '\f';
+         case 'n':
+            return '\n';
+         case 'r':
+            return '\r';
+         case 't':
+            return '\t';
+         case 'v':
+            return '\v';
+         case ']':
+            return ']';
+         // TODO: \NNN and \xNN
+         default:
+            throw "Invalid escape character";
          };
       };
       for (const char* cur = init_string.data(); cur != init_string.end();) {
@@ -317,10 +326,7 @@ struct char_ {
       }
    }
 
-   constexpr bool parse(unsigned char c) const noexcept
-   {
-      return allowed[c];
-   }
+   constexpr bool parse(unsigned char c) const noexcept { return allowed[c]; }
 
 private:
    std::array<bool, 256> allowed;

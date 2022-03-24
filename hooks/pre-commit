@@ -10,6 +10,7 @@ fi
 for i in ${changed_files}; do
    if [[ "$i" =~ .*\.(cpp|hpp) ]]; then
       clang-format -i "$i"
+      git add "$i"
    fi
 done
 
