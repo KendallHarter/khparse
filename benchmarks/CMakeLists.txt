@@ -39,7 +39,6 @@ if (NOT ${benchmark_FOUND})
       COMMAND ${CMAKE_COMMAND}
          --build .
          --target install
-         --configuration Release
       WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/benchmark_source/build
    )
    find_package(
