@@ -1,3 +1,5 @@
+#include "nonstd/expected.hpp"
+
 #include <algorithm>
 #include <cassert>
 #include <climits>
@@ -141,25 +143,40 @@ constexpr auto find_rule(std::string_view v) -> const_expected<std::pair<rule_st
          return std::pair<rule_str, std::string_view>{
             {{start_rule, end_rule}, {start_def, end_next}, num_entities}, {end_next + 1, v.end()}};
       }
-      else if (*end_next == one_of<'"', '\'', '`', '[', '{'>) {
+      else if (*end_next == '{') {
+         const auto next = std::find(start_next + 1, v.end(), '}');
+         if (next == v.end()) {
+            return unexpected{
+               rule_err{start_next + 1, "Unexpected end of string when looking for terminator character }"}};
+         }
+         start_next = next + 1;
+      }
+      else if (*end_next == one_of<'"', '\'', '`'>) {
          start_next = end_next;
-         const auto [end_char, escape_allowed] = [&]() -> std::pair<char, bool> {
-            switch (*end_next) {
-            case '[':
-               return {']', true};
-            case '{':
-               return {'}', false};
-            default:
-               return {*end_next, true};
-            }
-         }();
+         const auto end_char = *end_next;
          do {
             const auto err_loc = start_next;
-            start_next = std::find(start_next + 1, v.end(), end_char);
-            if (start_next == v.end()) {
-               return unexpected{rule_err{err_loc, "Unexpected end of string when looking for terminator character"}};
+            if (*start_next == '[') {
+               do {
+                  start_next = std::find(start_next + 1, v.end(), ']');
+                  if (start_next == v.end()) {
+                     return unexpected{
+                        rule_err{err_loc, "Unexpected end of string when looking for terminator character ]"}};
+                  }
+               } while (*(start_next - 1) == '\'');
             }
-         } while (escape_allowed && *(start_next - 1) == '\\');
+            start_next = std::find_if(start_next + 1, v.end(), [&](char c) { return c == end_char || c == '['; });
+            if (start_next == v.end()) {
+               // Do this dumb thing to get a constexpr string for more context
+               const std::array<char, 4> terminators{{'"', '\'', '`'}};
+               const int index = std::ranges::find(terminators, end_char) - terminators.cbegin();
+               constexpr std::array<const char*, 4> err_strs{
+                  {"Unexpected end of string when looking for terminator character \"",
+                   "Unexpected end of string when looking for terminator character '",
+                   "Unexpected end of string when looking for terminator character `"}};
+               return unexpected{rule_err{err_loc, err_strs[index]}};
+            }
+         } while (*(start_next - 1) == '\\' || *start_next != end_char);
          ++start_next;
       }
       else if (*end_next == '(') {
@@ -176,12 +193,12 @@ constexpr auto find_rule(std::string_view v) -> const_expected<std::pair<rule_st
       else if (is_alpha(*end_next)) {
          start_next = std::find_if_not(end_next, v.end(), is_alpha_or_other);
       }
-      else if (*end_next == one_of<'-', '|', '+', '*'>) {
+      else if (*end_next == one_of<'|', '+', '*'>) {
          start_next = end_next + 1;
       }
       else {
          return unexpected{
-            rule_err{end_next, R"(Unexpected character in rule definition (must be within [[(a-zA-Z='"`|-+*]))"}};
+            rule_err{end_next, R"(Unexpected character in rule definition (must be within [[(a-zA-Z='"`|+*]))"}};
       }
       ++num_entities;
    }
@@ -193,7 +210,7 @@ struct error {
 };
 
 template<comp_str str>
-constexpr auto decompose_rules_impl()
+constexpr auto decompose_rules_impl() /* -> std::array<rule_str> */
 {
    constexpr auto v = std::string_view(str.data);
    // This is ensured to be large enough to hold all rules
@@ -240,7 +257,7 @@ constexpr auto decompose_rules_impl()
          constexpr auto why_size = [&]() {
             int i = 0;
             for (; err_info.why[i] != '\0'; ++i) {}
-            return i;
+            return i + 1;
          }();
          std::array<char, why_size> why;
          for (int i = 0; i < why_size; ++i) {
@@ -260,7 +277,7 @@ inline constexpr auto decompose_rules = decompose_rules_impl<str>();
 template<typename T>
 struct parse_success {
    const char* rest;
-   T value;
+   [[no_unique_address]] T value;
 };
 
 struct parse_failure {
@@ -268,106 +285,74 @@ struct parse_failure {
    const char* why;
 };
 
-struct char_ {
-   using result_type = char;
+template<typename T>
+using parse_result = nonstd::expected<parse_success<T>, parse_failure>;
 
-   constexpr char_() noexcept : allowed{{true}} {}
-
-   constexpr char_(unsigned char c) noexcept : allowed{{false}} { allowed[c] = true; }
-
-   constexpr char_(std::string_view init_string) noexcept : allowed{{false}}
-   {
-      constexpr auto unescape = [&](unsigned char c) -> unsigned char {
-         switch (c) {
-         case '\'':
-            return '\'';
-         case '"':
-            return '\"';
-         case '?':
-            return '\?';
-         case '\\':
-            return '\\';
-         case 'a':
-            return '\a';
-         case 'b':
-            return '\b';
-         case 'f':
-            return '\f';
-         case 'n':
-            return '\n';
-         case 'r':
-            return '\r';
-         case 't':
-            return '\t';
-         case 'v':
-            return '\v';
-         case ']':
-            return ']';
-         // TODO: \NNN and \xNN
-         default:
-            throw "Invalid escape character";
-         };
-      };
-      for (const char* cur = init_string.data(); cur != init_string.end();) {
-         if (*cur == '\\') {
-            allowed[unescape(cur[1])] = true;
-            cur += 2;
+template<comp_str set>
+constexpr bool is_in_set(char c) noexcept
+{
+   const char* set_loc = std::begin(set.data);
+   while (set_loc != std::end(set.data)) {
+      if (*set_loc == '\\') {
+         if (set_loc[1] == c) {
+            return true;
          }
-         else if (cur[1] == '-') {
-            for (unsigned char c = cur[0]; c <= cur[2]; ++c) {
-               allowed[c] = true;
-            }
-            cur += 3;
+         set_loc += 2;
+      }
+      if (set_loc + 1 < std::end(set.data) && set_loc[1] == '-') {
+         if (c >= set_loc[0] && c <= set_loc[2]) {
+            return true;
          }
-         else {
-            allowed[static_cast<unsigned char>(*cur)] = true;
-            ++cur;
+         set_loc += 3;
+      }
+      else {
+         if (*set_loc == c) {
+            return true;
          }
+         ++set_loc;
       }
    }
+   return false;
+}
 
-   constexpr bool parse(unsigned char c) const noexcept { return allowed[c]; }
-
-private:
-   std::array<bool, 256> allowed;
-};
+static_assert(is_in_set<"12">('1'));
 
 int main()
 {
    constexpr auto rule = decompose_rules<R"(
-        hi='1\'2' [123] [\][(a-zA-Z='"`]{5-9};
+        hi='1\'2' "[123]" "[\]" "[(a-zA-Z='"`]"{5,9};
         borzoi = "borz"|"borzoi";
         test= hi borzoi;
     )">;
    static_assert(rule[0].name == "hi");
-   static_assert(rule[0].num_def_entities == 4);
+   static_assert(rule[0].num_def_entities == 5);
    static_assert(rule[1].name == "borzoi");
    static_assert(rule[1].num_def_entities == 3);
    static_assert(rule[2].name == "test");
    static_assert(rule[2].num_def_entities == 2);
 
-   constexpr auto rules = decompose_rules<R"ebnf(
-      letter = [a-zA-Z] ;
-      digit = [0-9] ;
-      symbol = [[\]{}()<>'"=|.,;] ;
-      character = letter | digit | symbol | "_" ;
-      identifier = letter (letter | digit | "_")+ ;
-      terminal = "'" character+ "'" | '"' character+ '"' ;
-      lhs = identifier ;
-      rhs = identifier
-          | terminal
-          | "[" rhs "]"
-          | "{" rhs "}"
-          | "(" rhs ")"
-          | rhs "|" rhs
-          | rhs "," rhs ;
-      rule = lhs "=" rhs ";" ;
-      grammer = rule+ ;
-   )ebnf">;
-   for (const auto& r : rules) {
-      std::cout << r.name << ": " << r.num_def_entities << '\n';
-   }
-   std::cout << rules[7].num_def_entities << ' ' << rules[7].def.size() << '\n';
+   // constexpr auto rules = decompose_rules<R"ebnf(
+   //    letter = [a-zA-Z] ;
+   //    digit = [0-9] ;
+   //    symbol = [[\]{}()<>'"=|.,;] ;
+   //    character = letter | digit | symbol | "_" ;
+   //    identifier = letter (letter | digit | "_")+ ;
+   //    terminal = "'" character+ "'" | '"' character+ '"' ;
+   //    lhs = identifier ;
+   //    rhs = identifier
+   //        | terminal
+   //        | "[" rhs "]"
+   //        | "{" rhs "}"
+   //        | "(" rhs ")"
+   //        | rhs "|" rhs
+   //        | rhs "," rhs ;
+   //    rule = lhs "=" rhs ";" ;
+   //    grammer = rule+ ;
+   // )ebnf">;
+   // for (const auto& r : rules) {
+   //    std::cout << r.name << ": " << r.num_def_entities << '\n';
+   // }
+   // std::cout << rules[7].num_def_entities << ' ' << rules[7].def.size() << '\n';
    // constexpr auto rules = test<R"ebnf(
    // letter = "A" | "B" | "C" | "D" | "E" | "F" | "G"
    //         | "H" | "I" | "J" | "K" | "L" | "M" | "N"

@@ -8,4 +8,4 @@ popd
 ln -s build/compile_commands.json
 
 # Hook install
-./hooks/install.sh
+./hooks/install.sh 
