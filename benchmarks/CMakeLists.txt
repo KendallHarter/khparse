@@ -7,39 +7,11 @@ if (NOT ${benchmark_FOUND})
       message(FATAL_ERROR Neither Google Benchmark nor Git could be found; disable benchmarks or install one)
    endif()
    
-   # gcmd = git command
-   function(gcmd)
-      execute_process(
-         COMMAND ${GIT_EXECUTABLE} ${ARGV}
-         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/benchmark_source
-      )
-   endfunction()
-
-   execute_process(
-      COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/benchmark_source
-   )
-   gcmd(init)
-   gcmd(remote add origin https://github.com/google/benchmark.git)
-   gcmd(fetch --depth 1 origin 5704cd4c8cea889d68f9ae29ca5aaee97ef91816)
-   gcmd(checkout FETCH_HEAD)
-   execute_process(
-      COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/benchmark_source/build
-      WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/benchmark_source
-   )
-   execute_process(
-      COMMAND ${CMAKE_COMMAND} 
-         -DCMAKE_BUILD_TYPE=Release 
-         -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/benchmark_source/install
-         -DBENCHMARK_ENABLE_TESTING=False
-         -G ${CMAKE_GENERATOR} 
-         ..
-      WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/benchmark_source/build
-   )
-   execute_process(
-      COMMAND ${CMAKE_COMMAND}
-         --build .
-         --target install
-      WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/benchmark_source/build
+   clone_repo(benchmark https://github.com/google/benchmark.git 5704cd4c8cea889d68f9ae29ca5aaee97ef91816)
+   install_repo(benchmark
+      -DCMAKE_BUILD_TYPE=Release 
+      -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/benchmark_source/install
+      -DBENCHMARK_ENABLE_TESTING=False
    )
    find_package(
       benchmark
