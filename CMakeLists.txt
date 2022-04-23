@@ -9,12 +9,17 @@ set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 function(clone_repo name url tag)
+   execute_process(COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/repos/${name})
+   execute_process(COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/repo_versions/)
+   if (EXISTS ${CMAKE_BINARY_DIR}/repo_versions/${name})
+      file(READ ${CMAKE_BINARY_DIR}/repo_versions/${name} version)
+      if (${version} STREQUAL ${tag})
+         return()
+      endif()
+   endif()
    find_package(Git)
    # gcmd = git command
    function(gcmd)
-      execute_process(
-         COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/repos/${name}
-      )
       execute_process(
          COMMAND ${GIT_EXECUTABLE} ${ARGV}
          WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/repos/${name}
@@ -25,6 +30,7 @@ function(clone_repo name url tag)
    gcmd(remote add origin ${url})
    gcmd(fetch --depth 1 origin ${tag})
    gcmd(checkout FETCH_HEAD)
+   file(WRITE ${CMAKE_BINARY_DIR}/repo_versions/${name} ${tag})
 endfunction()
 
 function(install_repo name #[[configure_args...]])
@@ -52,7 +58,7 @@ target_include_directories(expected SYSTEM INTERFACE ${CMAKE_BINARY_DIR}/repos/e
 if (MSVC)
    add_compile_options(/W4)
 else()
-   add_compile_options(-Wall -Wextra -Wpedantic)
+   add_compile_options(-Wall -Wextra -Wpedantic -fmodules-ts)
 endif()
 
 add_executable(parser

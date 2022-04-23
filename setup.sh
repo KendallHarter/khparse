@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # clangd setup
 mkdir -p build
