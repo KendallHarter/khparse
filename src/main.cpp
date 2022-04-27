@@ -1,6 +1,8 @@
+#include <bits/utility.h>
 #include <ctre.hpp>
 
 #include <algorithm>
+#include <array>
 #include <bit>
 #include <cassert>
 #include <climits>
@@ -72,6 +74,9 @@ private:
 template<typename T, typename E>
 struct const_expected {
 public:
+   using value_type = T;
+   using error_type = E;
+
    constexpr const_expected() noexcept : value_{{}}, error_{{}}, has_value_{false} {}
    constexpr const_expected(const T& val) noexcept : value_{val}, error_{}, has_value_{true} {}
    constexpr const_expected(unexpected<E> err) noexcept : value_{}, error_{err.error()}, has_value_{false} {}
@@ -250,13 +255,8 @@ struct comp_error {
 
 template<typename T>
 struct parse_success {
-   const char* rest;
    [[no_unique_address]] T value;
-};
-
-struct parse_failure {
-   const char* where;
-   const char* why;
+   const char* rest;
 };
 
 template<const_str Str>
@@ -265,9 +265,7 @@ inline constexpr auto str_to_parser = []() {
       constexpr auto is_bounder = [](char c) { return c == one_of<'"', '`', '\''>; };
       constexpr auto v = std::string_view(Str.data);
       constexpr auto start = std::find_if(v.begin(), v.end(), is_bounder);
-      constexpr auto end
-         = std::find_if(std::make_reverse_iterator(v.begin()), std::make_reverse_iterator(v.end()), is_bounder).base()
-         - 1;
+      constexpr auto end = std::find_if(v.rbegin(), v.rend(), is_bounder).base() - 1;
       static_assert(*start == *end);
       static_assert(start != end);
       std::array<char, std::distance(start, end)> raw_str{0};
@@ -285,38 +283,45 @@ enum class parser_type {
    repeat,
    rule,
    alternate,
-   int8,
-   int16,
-   int32,
-   int64,
-   uint8,
-   uint16,
-   uint32,
-   uint64
+   int_,
+   uint,
+   float_,
+   double_
 };
 
-constexpr inline std::string_view predef_parsers[]{
-   "int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"};
+constexpr inline std::string_view predef_parsers[]{"int", "uint", "float", "double"};
+
+template<parser_type Type>
+using gen_type = std::conditional_t<
+   Type == parser_type::char_,
+   nil_t,
+   std::conditional_t<
+      Type == parser_type::char_capture,
+      std::string_view,
+      std::conditional_t<
+         Type == parser_type::int_,
+         std::int64_t,
+         std::conditional_t<
+            Type == parser_type::uint,
+            std::uint64_t,
+            std::conditional_t<
+               Type == parser_type::float_,
+               float,
+               std::conditional_t<Type == parser_type::double_, double, void>>>>>>;
 
 // No union as it really complicates things
-// It shouldn't really matter too much since it'll almost exclusively be used
-// at compile-time only
+// It's kinda manually made a union below, though
 // This gets transformed into the more template friendly form below
 struct temp_entity_def {
    parser_type type;
-   nil_t dummy{};
    std::string_view def{};
    std::pair<int, int> min_max{0, 0};
 };
 
 struct const_entity_def {
    parser_type type;
-   nil_t dummy{};
-   int name_start{};
-   int name_end{};
-   int def_start{};
-   int def_end{};
-   std::pair<int, int> min_max{0, 0};
+   int val1{0};
+   int val2{0};
 };
 
 constexpr inline auto str_to_entity_def = [](std::string_view v) -> temp_entity_def {
@@ -339,14 +344,12 @@ constexpr inline auto str_to_entity_def = [](std::string_view v) -> temp_entity_
    }
    else {
       const auto offset = std::distance(std::begin(predef_parsers), iter);
-      return {.type = static_cast<parser_type>(static_cast<int>(parser_type::int8) + offset)};
+      return {.type = static_cast<parser_type>(static_cast<int>(parser_type::int_) + offset)};
    }
 };
 
 template<typename T>
-struct defer_type {
-   using type = T;
-};
+using parse_result = const_expected<parse_success<T>, const char*>;
 
 template<
    const_str Str,
@@ -395,20 +398,95 @@ private:
             /* nothing */;
          }
       }
-      return std::ssize(RuleDef) - 1;
+      return std::ssize(RuleDef);
+   }
+
+   template<const_str Key, std::pair<int, int> Definition, is_std_array_of<const_entity_def> auto RuleDef>
+   static constexpr auto parse_by_definition(std::string_view full_str) noexcept
+   {
+      static_assert(Definition.first != Definition.second, "Empty alternative or parenthesis statement");
+      constexpr auto parse_entity = []<std::size_t I>(std::string_view v) {
+         constexpr const_entity_def def = RuleDef[Definition.first + I];
+         if constexpr (std::same_as<gen_type<def.type>, void>) {
+            // TODO: Groups and such
+            return parse_result<nil_t>{parse_success{nil, v.begin()}};
+         }
+         else {
+            // TODO: other types
+            if constexpr (def.type == parser_type::char_ || def.type == parser_type::char_capture) {
+               constexpr const_str parser_str = [=]() {
+                  std::array<char, def.val2 - def.val1 + 1> parser_str{};
+                  for (int i = def.val1; i < def.val2; ++i) {
+                     parser_str[i - def.val1] = Str.data[i];
+                  }
+                  return const_str{parser_str};
+               }();
+               const auto match = str_to_parser<parser_str.data>(v);
+               if (match) {
+                  if constexpr (def.type == parser_type::char_) {
+                     // This works on GCC but clangd complains...???
+                     return parse_result<nil_t>{parse_success{nil, v.begin() + match.size()}};
+                  }
+                  else {
+                     return parse_result<std::string_view>{parse_success{match.to_view(), v.begin() + match.size()}};
+                  }
+               }
+               using ret_type
+                  = parse_result<std::conditional_t<def.type == parser_type::char_, nil_t, std::string_view>>;
+               return ret_type{unexpected{v.data()}};
+            }
+            else {
+               return parse_result<nil_t>{parse_success{nil, v.begin()}};
+            }
+         }
+      };
+      constexpr auto result_size = Definition.second - Definition.first;
+      if constexpr (result_size == 1) {
+         return parse_entity.template operator()<0>(full_str);
+      }
+      else {
+         std::string_view to_parse = full_str;
+         // clang-format off
+         const auto deduce_type = [&]<std::size_t... I>(std::index_sequence<I...>)
+            -> std::tuple<typename decltype(parse_entity.template operator()<I>(to_parse))::value_type...>{};
+         // clang-format on
+         using value_type = decltype(deduce_type(std::index_sequence<result_size>{}));
+         value_type to_ret;
+         const_expected<int, const char*> ret_error{0};
+         const auto process = [&]<std::size_t I>() {
+            if (!ret_error) {
+               return;
+            }
+            const auto result = parse_entity.template operator()<I>(to_parse);
+            if (result) {
+               std::get<I>(to_ret) = result.value().value;
+               to_parse = {result.value().rest, to_parse.end()};
+            }
+            else {
+               ret_error = unexpected{result.error()};
+            }
+         };
+         [&]<std::size_t... I>(std::index_sequence<I...>) { (process.template operator()<I>(), ...); }
+         (std::make_index_sequence<result_size - 1>());
+         if (ret_error) {
+            return parse_result<value_type>{parse_success{to_ret, to_parse.begin()}};
+         }
+         else {
+            return parse_result<value_type>(unexpected{ret_error.error()});
+         }
+      }
    }
 
    template<const_str Key, is_std_array_of<const_entity_def> auto RuleDef>
    static constexpr auto parse_impl(std::string_view v) noexcept
    {
-      (void)v;
       constexpr int num_defs = []() {
          int loc = 0;
          int count = 0;
          while (true) {
             ++count;
             loc = find_seq_end<RuleDef>(loc);
-            if (loc == RuleDef.size() - 1) {
+            if (loc == std::ssize(RuleDef)) {
                return count;
             }
             ++loc;
@@ -423,7 +501,14 @@ private:
          }
          return defs;
       }();
-      return defs.size();
+      const auto parse_def = [=]<std::size_t I>() { return parse_by_definition<Key, defs[I], RuleDef>(v); };
+      if constexpr (num_defs == 1) {
+         return parse_def.template operator()<0>();
+      }
+      else {
+         // TODO: Multiple sizes
+         return parse_def.template operator()<0>();
+      }
    }
 
    template<const_str Key>
@@ -547,17 +632,23 @@ inline constexpr /*is_std_array_of<rule_str>*/ auto decompose_rules = []() {
    constexpr auto final_entities_array = [=]() {
       std::array<const_entity_def, entities_array.size()> final_entities_array{{}};
       for (int i = 0; i < std::ssize(rule_defs); ++i) {
-         final_entities_array[i] = {.type = entities_array[i].type, .min_max = entities_array[i].min_max};
-         if (final_entities_array[i].type == parser_type::rule) {}
+         final_entities_array[i]
+            = {.type = entities_array[i].type,
+               .val1 = entities_array[i].min_max.first,
+               .val2 = entities_array[i].min_max.second};
+         if (final_entities_array[i].type == parser_type::rule) {
+            for (int i = 0; i < std::ssize(rule_names); ++i) {
+               if (entities_array[i].def == rule_names[i]) {
+                  final_entities_array[i].val1 = rule_offsets[i].first;
+                  final_entities_array[i].val2 = rule_offsets[i].second;
+               }
+            }
+         }
          else if (
             final_entities_array[i].type == parser_type::char_
             || final_entities_array[i].type == parser_type::char_capture) {
-            for (int i = 0; i < std::ssize(rule_names); ++i) {
-               if (entities_array[i].def == rule_names[i]) {
-                  final_entities_array[i].def_start = rule_offsets[i].first;
-                  final_entities_array[i].def_end = rule_offsets[i].second;
-               }
-            }
+            final_entities_array[i].val1 = std::distance(std::begin(Str.data), entities_array[i].def.begin());
+            final_entities_array[i].val2 = final_entities_array[i].val1 + std::ssize(entities_array[i].def);
          }
       }
       return final_entities_array;
@@ -565,43 +656,18 @@ inline constexpr /*is_std_array_of<rule_str>*/ auto decompose_rules = []() {
    return grammar<Str, rule_names.size(), rule_offsets, rule_defs, final_entities_array>{};
 }();
 
-int main()
+int main(int argc, const char* argv[])
 {
+   (void)argc;
    constexpr auto rules = decompose_rules<R"(
-        hi='1\'2' "[123]" "[\][(a-zA-Z='"`]"{5,9};
         borzoi = "borz(oi)?";
-        test= hi borzoi;
-        heck = "two";
-        i = "why";
-        h = i;
-        g = h;
-        f = g;
-        e = f;
-        d = e;
-        c = d;
-        b = c;
-        a = b;
-
+        test= borzoi borzoi;
+        borzoi2 = "borzoi" "borzoi";
     )">;
 
-   constexpr auto vals = rules.parse<"borzoi">("");
-   std::cout << vals << '\n';
-   // for (const auto& r : rules) {
-   //    std::cout << r.first << '\n';
-   // }
-   // std::cout << rule.size() << '\n';
-   // static_assert(rule[0].name == "hi");
-   // static_assert(rule[0].num_def_entities == 4);
-   // static_assert(rule[1].name == "borzoi");
-   // static_assert(rule[1].num_def_entities == 1);
-   // static_assert(rule[2].name == "test");
-   // static_assert(rule[2].num_def_entities == 2);
-
-   // constexpr auto tester = str_to_entity_def<comp_str<rule[1].def.size() + 1>{rule[1].def}>;
-   // constexpr auto matcher = str_to_parser<comp_str<rule[1].def.size() + 1>{rule[1].def}>;
-
-   // std::string input;
-   // while (std::cin >> input) {
-   //    std::cout << matcher(input) << '\n';
-   // }
+   // std::cout << rules.parse<"borzoi">("").data << '\n';
+   static_assert(!rules.parse<"borzoi">("broizo"));
+   static_assert(rules.parse<"borzoi">("borzoi"));
+   static_assert(rules.parse<"borzoi">("borz"));
+   return static_cast<bool>(rules.parse<"borzoi">(argv[1]));
 }
