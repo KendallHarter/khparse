@@ -7,6 +7,7 @@
 #include <charconv>
 #include <concepts>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <variant>
 
@@ -181,6 +182,13 @@ inline constexpr auto with_skipper = with_skipper_t{};
 
 template<parser Skipper, parser... Parsers>
 requires(sizeof...(Parsers) > 0) struct seq {
+private:
+   [[no_unique_address]] std::tuple<Parsers...> parsers_;
+   [[no_unique_address]] Skipper skipper_;
+
+   inline static constexpr auto write_locations = seq_write_locs<Parsers...>;
+   using prod_type = decltype(seq_ret_type<write_locations, Parsers...>());
+
 public:
    template<std::constructible_from<Parsers>... ArgParsers>
    seq(ArgParsers&&... args) noexcept : parsers_{static_cast<ArgParsers&&>(args)...}, skipper_{}
@@ -191,11 +199,6 @@ public:
       : parsers_{static_cast<ArgParsers&&>(args)...}, skipper_{static_cast<SkipperArg&&>(skipper)}
    {}
 
-private:
-   inline static constexpr auto write_locations = seq_write_locs<Parsers...>;
-   using prod_type = decltype(seq_ret_type<write_locations, Parsers...>());
-
-public:
    auto parse(std::string_view v) const noexcept -> parse_result<prod_type>
    {
       prod_type to_ret;
@@ -241,10 +244,6 @@ public:
          return nonstd::make_unexpected(err);
       }
    }
-
-private:
-   [[no_unique_address]] std::tuple<Parsers...> parsers_;
-   [[no_unique_address]] Skipper skipper_;
 };
 
 template<parser... Parsers>
@@ -285,7 +284,11 @@ inline constexpr auto ibin64 = number<std::int64_t>{2};
 
 template<const_str Regex, bool DropResult>
 struct regex_impl {
+private:
    using value_type = std::conditional_t<DropResult, nil_t, std::string_view>;
+   static inline constexpr auto matcher = ctre::match<Regex.data>;
+
+public:
    static auto parse(std::string_view v) noexcept -> parse_result<value_type>
    {
       const auto result = matcher.starts_with(v);
@@ -299,8 +302,6 @@ struct regex_impl {
          return parse_success<std::string_view>{result.to_view(), v.begin() + result.to_view().size()};
       }
    }
-
-   static inline constexpr auto matcher = ctre::match<Regex.data>;
 };
 
 template<const_str Regex>
@@ -309,14 +310,27 @@ inline constexpr auto drop = regex_impl<Regex, true>{};
 template<const_str Regex>
 inline constexpr auto capture = regex_impl<Regex, false>{};
 
-template<parser Parser>
+template<typename Skipper, parser Parser>
 struct repeat {
-public:
-   repeat(Parser&& p, int min, int max) noexcept : min_{min}, max_{max}, parser_{static_cast<Parser&&>(p)} {}
+private:
+   int min_;
+   int max_;
+   [[no_unique_address]] Parser parser_;
+   [[no_unique_address]] Skipper skipper_;
 
    using base_type = produced_type<Parser>;
    static inline constexpr bool nil_type = std::same_as<base_type, nil_t>;
    using value_type = std::conditional_t<nil_type, nil_t, std::vector<produced_type<Parser>>>;
+
+public:
+   template<std::constructible_from<Parser> ArgParser>
+   repeat(ArgParser&& p) noexcept : min_{0}, max_{0}, parser_{static_cast<ArgParser&&>(p)}, skipper_{}
+   {}
+
+   template<std::constructible_from<Skipper> ArgSkipper, std::constructible_from<Parser> ArgParser>
+   repeat(with_skipper_t, ArgSkipper&& s, ArgParser&& p) noexcept
+      : min_{0}, max_{0}, parser_{static_cast<ArgParser&&>(p)}, skipper_{static_cast<ArgSkipper&&>(s)}
+   {}
 
    auto parse(std::string_view v) const noexcept -> parse_result<value_type>
    {
@@ -351,12 +365,13 @@ public:
          return parse_success<value_type>{to_ret, parse_loc};
       }
    }
-
-private:
-   int min_;
-   int max_;
-   [[no_unique_address]] Parser parser_;
 };
+
+template<parser Parser>
+repeat(Parser) -> repeat<always_fail, Parser>;
+
+template<parser Parser, parser Skipper>
+repeat(with_skipper_t, Skipper, Parser) -> repeat<Skipper, Parser>;
 
 template<typename FirstResType, typename... RestResType>
 auto calc_or_type() -> std::conditional_t<
@@ -366,6 +381,9 @@ auto calc_or_type() -> std::conditional_t<
 
 template<parser... Parsers>
 struct or_ {
+private:
+   [[no_unique_address]] std::tuple<Parsers...> parsers_;
+
 public:
    template<std::constructible_from<Parsers>... ArgParsers>
    or_(ArgParsers&&... args) noexcept : parsers_{static_cast<ArgParsers&&>(args)...}
@@ -403,17 +421,48 @@ public:
          return nonstd::make_unexpected(parse_error{v.begin()});
       }
    }
-
-private:
-   [[no_unique_address]] std::tuple<Parsers...> parsers_;
 };
 
 template<parser... Parsers>
 or_(Parsers...) -> or_<Parsers...>;
 
-int main()
-{
-   auto a = seq{with_skipper, drop<" ">, or_{u8, u8}, u8};
-   // assert(a.parse("123 126")->value == (std::vector<std::uint8_t>{123, 126}));
-   assert(a.parse("123 126")->value == std::make_tuple(123, 126));
-}
+template<typename T>
+using nilify = std::conditional_t<std::same_as<T, void>, nil_t, T>;
+
+// TODO: constrain Callable
+template<parser Parser, typename Callable>
+struct bind {
+private:
+   [[no_unique_address]] Parser parser_;
+   [[no_unique_address]] Callable callable_;
+
+   using value_type = nilify<decltype(callable_(parser_.parse(std::string_view{})->value))>;
+
+public:
+   template<std::constructible_from<Parser> ArgParser, std::constructible_from<Callable> ArgCallable>
+   bind(ArgParser&& parser, ArgCallable&& callable) noexcept
+      : parser_{static_cast<ArgParser&&>(parser)}, callable_{static_cast<ArgCallable&&>(callable)}
+   {}
+
+   auto parse(std::string_view v) const -> parse_result<value_type>
+   {
+      const auto result = parser_.parse(v);
+      if (!result) {
+         return nonstd::make_unexpected(result.error());
+      }
+      else {
+         if constexpr (std::same_as<value_type, nil_t>) {
+            callable_(result->value);
+            return parse_success<nil_t>{nil, result->rest};
+         }
+         else {
+            return parse_success<value_type>{callable_(result->value), result->rest};
+         }
+      }
+   }
+};
+
+template<parser Parser, typename Callable>
+bind(Parser, Callable) -> bind<Parser, Callable>;
+
+int main() {}

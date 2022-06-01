@@ -57,7 +57,7 @@ target_include_directories(expected SYSTEM INTERFACE ${CMAKE_BINARY_DIR}/repos/e
 if (MSVC)
    add_compile_options(/W4)
 else()
-   add_compile_options(-Wall -Wextra -Wpedantic -fmodules-ts)
+   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
 add_executable(parser
