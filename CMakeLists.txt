@@ -65,4 +65,3 @@ add_executable(parser
 )
 
 target_link_libraries(parser PUBLIC expected ctre::ctre)
-add_subdirectory(benchmarks/runtime)

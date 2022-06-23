@@ -1,15 +1,21 @@
+// For some reason the auto-detection is failing all of a sudden?
+// So force it to use the non-std version
+#define nsel_CONFIG_SELECT_EXPECTED nsel_EXPECTED_NONSTD
+#include <nonstd/expected.hpp>
+
 #include <bits/utility.h>
 #include <ctre.hpp>
-#include <nonstd/expected.hpp>
 
 #include <algorithm>
 #include <array>
 #include <charconv>
 #include <concepts>
+#include <functional>
 #include <string_view>
 #include <type_traits>
 #include <utility>
 #include <variant>
+#include <vector>
 
 // // clang-format off
 // template<typename T, template<typename...> typename BaseTemplate>
@@ -107,10 +113,10 @@ struct number {
       else if (ec == std::errc::invalid_argument) {
          return nonstd::make_unexpected(parse_error{v.begin()});
       }
-      else if (ec == std::errc::result_out_of_range) {
+      else /* if (ec == std::errc::result_out_of_range) */ {
          return nonstd::make_unexpected(parse_error{v.begin()});
       }
-      assert(false);
+      // assert(false);
    }
 };
 
@@ -131,6 +137,9 @@ constexpr std::array inline seq_write_locs = []() {
    return write_locations;
 }();
 
+template<auto>
+struct TD;
+
 template<std::array write_locs, parser... Parsers>
 constexpr auto inline seq_ret_type = []() {
    using raw_type = std::tuple<produced_type<Parsers>...>;
@@ -143,8 +152,8 @@ constexpr auto inline seq_ret_type = []() {
       return nil;
    }
    else if constexpr (num_values == 1) {
-      constexpr auto value_loc = *std::ranges::find(write_locs, 0);
-      return std::tuple_element_t<write_locs[value_loc], raw_type>{};
+      constexpr auto value_loc = std::ranges::find(write_locs, 0);
+      return std::tuple_element_t<std::distance(std::begin(write_locs), value_loc), raw_type>{};
    }
    else {
       constexpr auto value_locs = []<std::size_t... I>(std::index_sequence<I...>)
@@ -190,11 +199,11 @@ private:
    using prod_type = decltype(seq_ret_type<write_locations, Parsers...>());
 
 public:
-   template<std::constructible_from<Parsers>... ArgParsers>
+   template<typename... ArgParsers>
    seq(ArgParsers&&... args) noexcept : parsers_{static_cast<ArgParsers&&>(args)...}, skipper_{}
    {}
 
-   template<std::constructible_from<Skipper> SkipperArg, std::constructible_from<Parsers>... ArgParsers>
+   template<typename SkipperArg, typename... ArgParsers>
    seq(with_skipper_t, SkipperArg&& skipper, ArgParsers&&... args) noexcept
       : parsers_{static_cast<ArgParsers&&>(args)...}, skipper_{static_cast<SkipperArg&&>(skipper)}
    {}
@@ -430,6 +439,9 @@ template<typename T>
 using nilify = std::conditional_t<std::same_as<T, void>, nil_t, T>;
 
 // TODO: constrain Callable
+// TODO: seq and or_ specialization
+//       seq uses std::apply
+//       or_ uses N callable arguments for each alternative
 template<parser Parser, typename Callable>
 struct bind {
 private:
@@ -444,7 +456,7 @@ public:
       : parser_{static_cast<ArgParser&&>(parser)}, callable_{static_cast<ArgCallable&&>(callable)}
    {}
 
-   auto parse(std::string_view v) const -> parse_result<value_type>
+   auto parse(std::string_view v) const noexcept -> parse_result<value_type>
    {
       const auto result = parser_.parse(v);
       if (!result) {
@@ -465,4 +477,41 @@ public:
 template<parser Parser, typename Callable>
 bind(Parser, Callable) -> bind<Parser, Callable>;
 
-int main() {}
+template<typename RetType>
+struct fwd_parser {
+public:
+   template<parser Parser>
+   // clang-format off
+      // TODO: Make "typed parser" concept instead of this
+      requires requires (Parser p, std::string_view v) { {p.parse(v)} -> std::same_as<parse_result<RetType>>; }
+   // clang-format on
+   fwd_parser(Parser&& p) noexcept : parser_{[&p](std::string_view v) { return p.parse(v); }} {}
+
+   constexpr fwd_parser() noexcept = default;
+
+   parse_result<RetType> parse(std::string_view v) const { return parser_(v); }
+
+private:
+   std::function<parse_result<RetType>(std::string_view)> parser_;
+};
+
+int main()
+{
+   fwd_parser<int64_t> math;
+   // clang-format off
+   const auto expression = or_{seq{with_skipper, drop<"\\s">, drop<"\\(">, math, drop<"\\)">}, i64};
+   const auto factor = or_{
+      bind{seq{with_skipper, drop<"\\s">, expression, drop<"\\*">, expression}, [](auto vals) { const auto [a, b] = vals; return a * b; }},
+      bind{seq{with_skipper, drop<"\\s">, expression, drop<"/">, expression}, [](auto vals) { const auto [a, b] = vals; return a / b; }},
+      expression
+   };
+   math = or_{
+      bind{seq{with_skipper, drop<"\\s">, factor, drop<"\\+">, factor}, [](auto vals) { const auto [a, b] = vals; return a + b; }},
+      bind{seq{with_skipper, drop<"\\s">, factor, drop<"-">, factor}, [](auto vals) { const auto [a, b] = vals; return a - b; }},
+      factor
+   };
+   // clang-format on
+   assert(math.parse("2 + 3").value().value == 5);
+   assert(math.parse("2 + 4 * 5").value().value == 22);
+   assert(math.parse("(2 + 4) * 5").value().value == 30);
+}
