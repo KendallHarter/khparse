@@ -60,8 +60,9 @@ else()
    add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-add_executable(parser
-   src/main.cpp
-)
+add_library(khparse INTERFACE)
+target_link_libraries(khparse INTERFACE expected ctre::ctre)
+target_include_directories(khparse INTERFACE src)
 
-target_link_libraries(parser PUBLIC expected ctre::ctre)
+add_executable(calculator examples/calculator.cpp)
+target_link_libraries(calculator PUBLIC khparse)

@@ -1,9 +1,11 @@
+#ifndef KHPARSE_HPP
+#define KHPARSE_HPP
+
 // For some reason the auto-detection is failing all of a sudden?
 // So force it to use the non-std version
 #define nsel_CONFIG_SELECT_EXPECTED nsel_EXPECTED_NONSTD
 #include <nonstd/expected.hpp>
 
-#include <bits/utility.h>
 #include <ctre.hpp>
 
 #include <algorithm>
@@ -33,6 +35,8 @@
 //    { []<std::size_t N>(const std::array<ElementType, N>){}(x) };
 // };
 // // clang-format on
+
+namespace khparse {
 
 struct nil_t {};
 
@@ -276,20 +280,20 @@ inline constexpr auto uhex16 = number<std::uint16_t>{16};
 inline constexpr auto uhex32 = number<std::uint32_t>{16};
 inline constexpr auto uhex64 = number<std::uint64_t>{16};
 
-inline constexpr auto ihex8 = number<std::int8_t>{16};
-inline constexpr auto ihex16 = number<std::int16_t>{16};
-inline constexpr auto ihex32 = number<std::int32_t>{16};
-inline constexpr auto ihex64 = number<std::int64_t>{16};
+inline constexpr auto hex8 = number<std::int8_t>{16};
+inline constexpr auto hex16 = number<std::int16_t>{16};
+inline constexpr auto hex32 = number<std::int32_t>{16};
+inline constexpr auto hex64 = number<std::int64_t>{16};
 
 inline constexpr auto ubin8 = number<std::uint8_t>{2};
 inline constexpr auto ubin16 = number<std::uint16_t>{2};
 inline constexpr auto ubin32 = number<std::uint32_t>{2};
 inline constexpr auto ubin64 = number<std::uint64_t>{2};
 
-inline constexpr auto ibin8 = number<std::int8_t>{2};
-inline constexpr auto ibin16 = number<std::int16_t>{2};
-inline constexpr auto ibin32 = number<std::int32_t>{2};
-inline constexpr auto ibin64 = number<std::int64_t>{2};
+inline constexpr auto bin8 = number<std::int8_t>{2};
+inline constexpr auto bin16 = number<std::int16_t>{2};
+inline constexpr auto bin32 = number<std::int32_t>{2};
+inline constexpr auto bin64 = number<std::int64_t>{2};
 
 template<const_str Regex, bool DropResult>
 struct regex_impl {
@@ -495,23 +499,6 @@ private:
    std::function<parse_result<RetType>(std::string_view)> parser_;
 };
 
-int main()
-{
-   fwd_parser<int64_t> math;
-   // clang-format off
-   const auto expression = or_{seq{with_skipper, drop<"\\s">, drop<"\\(">, math, drop<"\\)">}, i64};
-   const auto factor = or_{
-      bind{seq{with_skipper, drop<"\\s">, expression, drop<"\\*">, expression}, [](auto vals) { const auto [a, b] = vals; return a * b; }},
-      bind{seq{with_skipper, drop<"\\s">, expression, drop<"/">, expression}, [](auto vals) { const auto [a, b] = vals; return a / b; }},
-      expression
-   };
-   math = or_{
-      bind{seq{with_skipper, drop<"\\s">, factor, drop<"\\+">, factor}, [](auto vals) { const auto [a, b] = vals; return a + b; }},
-      bind{seq{with_skipper, drop<"\\s">, factor, drop<"-">, factor}, [](auto vals) { const auto [a, b] = vals; return a - b; }},
-      factor
-   };
-   // clang-format on
-   assert(math.parse("2 + 3").value().value == 5);
-   assert(math.parse("2 + 4 * 5").value().value == 22);
-   assert(math.parse("(2 + 4) * 5").value().value == 30);
-}
+} // namespace khparse
+
+#endif // KHPARSE_HPP
