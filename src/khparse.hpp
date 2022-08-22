@@ -141,9 +141,6 @@ constexpr std::array inline seq_write_locs = []() {
    return write_locations;
 }();
 
-template<auto>
-struct TD;
-
 template<std::array write_locs, parser... Parsers>
 constexpr auto inline seq_ret_type = []() {
    using raw_type = std::tuple<produced_type<Parsers>...>;
@@ -446,6 +443,7 @@ using nilify = std::conditional_t<std::same_as<T, void>, nil_t, T>;
 // TODO: seq and or_ specialization
 //       seq uses std::apply
 //       or_ uses N callable arguments for each alternative
+// TODO: Allow returning of errors from the bound function
 template<parser Parser, typename Callable>
 struct bind {
 private:
