@@ -2,8 +2,8 @@
 
 #include <iostream>
 
-// TODO: This is bugged somehow
-//       It's probably in the parser framework itself :c
+// This is a very limited calculator; for a more complex calculator post-processing
+// of the values or repeated parsing is needed
 int main()
 {
    using namespace khparse;
@@ -26,7 +26,8 @@ int main()
       factor
    };
    // clang-format on
-   assert(math.parse("2 + 3").value().value == 5);
+   assert(math.parse("10").value().value == 10);
+   assert(math.parse("5 * 5 + 5 * 10").value().value == 75);
    assert(math.parse("2 + 4 * 5").value().value == 22);
    assert(math.parse("(2 + 4) * 5").value().value == 30);
 }

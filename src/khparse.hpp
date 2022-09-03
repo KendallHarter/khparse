@@ -404,7 +404,6 @@ public:
    {
       value_type to_ret;
       const char* rest = nullptr;
-
       const auto handle_parser = [&]<std::size_t I>() {
          if (rest) {
             return;
