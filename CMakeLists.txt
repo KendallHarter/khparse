@@ -50,7 +50,7 @@ function(install_repo name #[[configure_args...]])
 endfunction()
 
 clone_repo(ctre https://github.com/hanickadot/compile-time-regular-expressions.git 5b914a62c71c6c6b336fd466a4e812db635b9fdc)
-add_subdirectory(${CMAKE_CURRENT_BINARY_DIR}/repos/ctre)
+add_subdirectory(${CMAKE_CURRENT_BINARY_DIR}/repos/ctre ${CMAKE_CURRENT_BINARY_DIR}/ctre_build)
 
 clone_repo(expected https://github.com/martinmoene/expected-lite.git 6284387cb117ea78d973fb5b1cbff1651a8d5d9a)
 add_library(expected INTERFACE)
