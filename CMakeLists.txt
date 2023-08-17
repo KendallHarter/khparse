@@ -8,6 +8,8 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+option(KHPARSE_BUILD_EXAMPLES "Build examples if true")
+
 function(clone_repo name url tag)
    execute_process(COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/repos/${name})
    execute_process(COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/repo_versions/)
@@ -64,5 +66,9 @@ add_library(khparse INTERFACE)
 target_link_libraries(khparse INTERFACE expected ctre::ctre)
 target_include_directories(khparse INTERFACE src)
 
-add_executable(calculator examples/calculator.cpp)
-target_link_libraries(calculator PUBLIC khparse)
+add_library(khparse::khparse ALIAS khparse)
+
+if (KHPARSE_BUILD_EXAMPLES)
+   add_executable(calculator examples/calculator.cpp)
+   target_link_libraries(calculator PUBLIC khparse)
+endif()
