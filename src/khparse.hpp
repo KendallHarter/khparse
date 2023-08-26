@@ -53,7 +53,7 @@ struct const_str {
 };
 
 template<auto... Values>
-requires requires { typename std::common_type<decltype(Values)...>::type; }
+   requires requires { typename std::common_type<decltype(Values)...>::type; }
 struct one_of_struct {
    friend constexpr bool operator==(const std::common_type_t<decltype(Values)...>& val, one_of_struct) noexcept
    {
@@ -144,11 +144,9 @@ constexpr std::array inline seq_write_locs = []() {
 template<std::array write_locs, parser... Parsers>
 constexpr auto inline seq_ret_type = []() {
    using raw_type = std::tuple<produced_type<Parsers>...>;
-   constexpr int num_values = []<std::size_t... I>(std::index_sequence<I...>)
-   {
+   constexpr int num_values = []<std::size_t... I>(std::index_sequence<I...>) {
       return (!(std::same_as<nil_t, std::tuple_element_t<I, raw_type>>)+...);
-   }
-   (std::make_index_sequence<sizeof...(Parsers)>{});
+   }(std::make_index_sequence<sizeof...(Parsers)>{});
    if constexpr (num_values == 0) {
       return nil;
    }
@@ -157,8 +155,7 @@ constexpr auto inline seq_ret_type = []() {
       return std::tuple_element_t<std::distance(std::begin(write_locs), value_loc), raw_type>{};
    }
    else {
-      constexpr auto value_locs = []<std::size_t... I>(std::index_sequence<I...>)
-      {
+      constexpr auto value_locs = []<std::size_t... I>(std::index_sequence<I...>) {
          std::array<int, num_values> value_locs;
          int write_to_values_loc = 0;
          for (int i = 0; i < std::ssize(write_locs); ++i) {
@@ -168,14 +165,11 @@ constexpr auto inline seq_ret_type = []() {
             }
          }
          return value_locs;
-      }
-      (std::index_sequence_for<Parsers...>{});
+      }(std::index_sequence_for<Parsers...>{});
 
-      return [=]<std::size_t... I>(std::index_sequence<I...>)
-      {
+      return [=]<std::size_t... I>(std::index_sequence<I...>) {
          return std::tuple<std::tuple_element_t<value_locs[I], raw_type>...>{};
-      }
-      (std::make_index_sequence<num_values>{});
+      }(std::make_index_sequence<num_values>{});
    }
 };
 
@@ -191,7 +185,8 @@ struct with_skipper_t {};
 inline constexpr auto with_skipper = with_skipper_t{};
 
 template<parser Skipper, parser... Parsers>
-requires(sizeof...(Parsers) > 0) struct seq {
+   requires(sizeof...(Parsers) > 0)
+struct seq {
 private:
    [[no_unique_address]] std::tuple<Parsers...> parsers_;
    [[no_unique_address]] Skipper skipper_;
@@ -244,8 +239,9 @@ public:
          }
       };
 
-      [&]<std::size_t... I>(std::index_sequence<I...>) { (handle_parser.template operator()<I>(), ...); }
-      (std::index_sequence_for<Parsers...>{});
+      [&]<std::size_t... I>(std::index_sequence<I...>) {
+         (handle_parser.template operator()<I>(), ...);
+      }(std::index_sequence_for<Parsers...>{});
 
       if (parse_loc) {
          return parse_success<prod_type>{to_ret, parse_loc};
@@ -346,7 +342,7 @@ public:
    {
       // There's probably a better way to handle nil types cleanly, but this works...
       const char* parse_loc = v.begin();
-      std::conditional_t<nil_type, int, value_type> to_ret;
+      std::conditional_t<nil_type, int, value_type> to_ret{};
       for (int i = 0; i < max_ || max_ == 0; ++i) {
          const auto result = parser_.parse({parse_loc, v.end()});
          if (!result) {
@@ -420,8 +416,9 @@ public:
          }
       };
 
-      [&]<std::size_t... I>(std::index_sequence<I...>) { (handle_parser.template operator()<I>(), ...); }
-      (std::index_sequence_for<Parsers...>{});
+      [&]<std::size_t... I>(std::index_sequence<I...>) {
+         (handle_parser.template operator()<I>(), ...);
+      }(std::index_sequence_for<Parsers...>{});
 
       if (rest) {
          return parse_success<value_type>{to_ret, rest};
@@ -486,7 +483,8 @@ public:
       // TODO: Make "typed parser" concept instead of this
       requires requires (Parser p, std::string_view v) { {p.parse(v)} -> std::same_as<parse_result<RetType>>; }
    // clang-format on
-   fwd_parser(Parser&& p) noexcept : parser_{[&p](std::string_view v) { return p.parse(v); }} {}
+   fwd_parser(Parser&& p) noexcept : parser_{[&p](std::string_view v) { return p.parse(v); }}
+   {}
 
    constexpr fwd_parser() noexcept = default;
 
