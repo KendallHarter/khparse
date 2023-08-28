@@ -10,9 +10,9 @@ int main()
    fwd_parser<int64_t> math;
    // clang-format off
    const auto number = or_{
-      i64,
       seq{drop<"0x">, hex64},
-      seq{drop<"0b">, bin64}
+      seq{drop<"0b">, bin64},
+      i64
    };
    const auto expression = or_{seq{with_skipper, drop<"\\s">, drop<"\\(">, math, drop<"\\)">}, number};
    const auto factor = or_{
