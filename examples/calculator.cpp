@@ -21,11 +21,12 @@ int main()
       bind{seq{with_skipper, drop<"\\s">, expression, drop<"/">, expression}, [](auto vals) { const auto [a, b] = vals; return a / b; }},
       expression
    };
-   math = or_{
+   const auto math_impl = or_{
       bind{seq{with_skipper, drop<"\\s">, factor, drop<"\\+">, factor}, [](auto vals) { const auto [a, b] = vals; return a + b; }},
       bind{seq{with_skipper, drop<"\\s">, factor, drop<"-">, factor}, [](auto vals) { const auto [a, b] = vals; return a - b; }},
       factor
    };
+   math = math_impl;
    // clang-format on
    assert(math.parse("10").value().value == 10);
    assert(math.parse("5 * 5 + 5 * 10").value().value == 75);

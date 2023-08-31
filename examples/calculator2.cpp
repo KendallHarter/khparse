@@ -38,12 +38,10 @@ int main()
       }
       return return_value;
    };
-   // Returning from a lambda here is a workaround to fix a memory corruption bug
-   expression = [&]() {
-      return bind{
-         seq{with_skipper, ws, term, repeat{with_skipper, ws, seq{with_skipper, ws, capture<"[+]|-">, term}}},
-         handle_expression};
-   }();
+   const auto expression_impl = bind{
+      seq{with_skipper, ws, term, repeat{with_skipper, ws, seq{with_skipper, ws, capture<"[+]|-">, term}}},
+      handle_expression};
+   expression = expression_impl;
    assert(expression.parse("1 + 2 + 3 + 4 + 5").value().value == 15);
    assert(expression.parse("5 * 5 + 5 * 5 - (5 * 5 + 5 * 5)").value().value == 0);
    std::string to_parse;

@@ -109,7 +109,7 @@ struct number {
 
    parse_result<IntType> parse(std::string_view v) const noexcept
    {
-      IntType to_ret;
+      IntType to_ret{};
       const auto [ptr, ec] = std::from_chars(v.begin(), v.end(), to_ret, base);
       if (ec == std::errc{}) {
          return parse_success<IntType>{to_ret, ptr};
@@ -499,8 +499,6 @@ public:
 template<parser Parser, typename Callable>
 bind(Parser, Callable) -> bind<Parser, Callable>;
 
-// TODO: This can produce dangling pointers when assigned to... but I'm not really sure why
-//       Find a way to fix this (current work around is to return a parser from a lambda)
 template<typename RetType>
 struct fwd_parser {
 public:
@@ -509,7 +507,9 @@ public:
       // TODO: Make "typed parser" concept instead of this
       requires requires (Parser p, std::string_view v) { {p.parse(v)} -> std::same_as<parse_result<RetType>>; }
    // clang-format on
-   fwd_parser(Parser&& p) noexcept : parser_{[&p](std::string_view v) { return p.parse(v); }}
+   // Only take references because an rvalue will dangle
+   // There might be a better way around this but this was the best I could come up with
+   fwd_parser(Parser& p) noexcept : parser_{[&p](std::string_view v) { return p.parse(v); }}
    {}
 
    constexpr fwd_parser() noexcept = default;
