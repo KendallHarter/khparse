@@ -206,14 +206,13 @@ public:
 
    auto parse(std::string_view v) const noexcept -> parse_result<prod_type>
    {
-      prod_type to_ret;
+      prod_type to_ret{};
       const char* parse_loc = v.begin();
-      parse_error err;
+      parse_error err{};
       const auto handle_parser = [&]<std::size_t I>() {
          if (!parse_loc) {
             return;
          }
-         // TODO: handle skipper here
          while (true) {
             const auto skip_result = skipper_.parse({parse_loc, v.end()});
             if (!skip_result) {
@@ -333,9 +332,19 @@ public:
    repeat(ArgParser&& p) noexcept : min_{0}, max_{0}, parser_{static_cast<ArgParser&&>(p)}, skipper_{}
    {}
 
+   template<std::constructible_from<Parser> ArgParser>
+   repeat(ArgParser&& p, int min, int max) noexcept
+      : min_{min}, max_{max}, parser_{static_cast<ArgParser&&>(p)}, skipper_{}
+   {}
+
    template<std::constructible_from<Skipper> ArgSkipper, std::constructible_from<Parser> ArgParser>
    repeat(with_skipper_t, ArgSkipper&& s, ArgParser&& p) noexcept
       : min_{0}, max_{0}, parser_{static_cast<ArgParser&&>(p)}, skipper_{static_cast<ArgSkipper&&>(s)}
+   {}
+
+   template<std::constructible_from<Skipper> ArgSkipper, std::constructible_from<Parser> ArgParser>
+   repeat(with_skipper_t, ArgSkipper&& s, ArgParser&& p, int min, int max) noexcept
+      : min_{min}, max_{max}, parser_{static_cast<ArgParser&&>(p)}, skipper_{static_cast<ArgSkipper&&>(s)}
    {}
 
    auto parse(std::string_view v) const noexcept -> parse_result<value_type>
@@ -344,6 +353,13 @@ public:
       const char* parse_loc = v.begin();
       std::conditional_t<nil_type, int, value_type> to_ret{};
       for (int i = 0; i < max_ || max_ == 0; ++i) {
+         while (true) {
+            const auto skip_result = skipper_.parse({parse_loc, v.end()});
+            if (!skip_result) {
+               break;
+            }
+            parse_loc = skip_result->rest;
+         }
          const auto result = parser_.parse({parse_loc, v.end()});
          if (!result) {
             break;
@@ -358,6 +374,7 @@ public:
             parse_loc = result->rest;
          }
       }
+      // Only need to check min_ here as max_ is handled by the loop above
       if constexpr (nil_type) {
          if (to_ret < min_) {
             return nonstd::make_unexpected(parse_error{parse_loc});
@@ -376,8 +393,14 @@ public:
 template<parser Parser>
 repeat(Parser) -> repeat<always_fail, Parser>;
 
+template<parser Parser>
+repeat(Parser, int, int) -> repeat<always_fail, Parser>;
+
 template<parser Parser, parser Skipper>
 repeat(with_skipper_t, Skipper, Parser) -> repeat<Skipper, Parser>;
+
+template<parser Parser, parser Skipper>
+repeat(with_skipper_t, Skipper, Parser, int, int) -> repeat<Skipper, Parser>;
 
 template<typename FirstResType, typename... RestResType>
 auto calc_or_type() -> std::conditional_t<
@@ -385,6 +408,7 @@ auto calc_or_type() -> std::conditional_t<
    FirstResType,
    std::variant<FirstResType, RestResType...>>;
 
+// TODO: Add variant that doesn't compress all types into the same thing in case that's wanted
 template<parser... Parsers>
 struct or_ {
 private:
@@ -475,6 +499,8 @@ public:
 template<parser Parser, typename Callable>
 bind(Parser, Callable) -> bind<Parser, Callable>;
 
+// TODO: This can produce dangling pointers when assigned to... but I'm not really sure why
+//       Find a way to fix this (current work around is to return a parser from a lambda)
 template<typename RetType>
 struct fwd_parser {
 public:

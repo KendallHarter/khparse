@@ -1,9 +1,10 @@
-#include "khparse.hpp"
-
-#include <iostream>
-
 // This is a very limited calculator; for a more complex calculator post-processing
 // of the values or repeated parsing is needed
+
+#include "khparse.hpp"
+
+#include <cassert>
+
 int main()
 {
    using namespace khparse;
