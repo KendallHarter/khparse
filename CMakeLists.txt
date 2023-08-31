@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.12)
 
-project(c64_parser)
+project(kh_parsing_library)
 
 include(ExternalProject)
 
@@ -64,7 +64,7 @@ endif()
 
 add_library(khparse INTERFACE)
 target_link_libraries(khparse INTERFACE expected ctre::ctre)
-target_include_directories(khparse INTERFACE src)
+target_include_directories(khparse INTERFACE khparse)
 
 add_library(khparse::khparse ALIAS khparse)
 
