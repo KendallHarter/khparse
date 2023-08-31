@@ -71,4 +71,7 @@ add_library(khparse::khparse ALIAS khparse)
 if (KHPARSE_BUILD_EXAMPLES)
    add_executable(calculator examples/calculator.cpp)
    target_link_libraries(calculator PUBLIC khparse)
+
+   add_executable(kh6502 examples/6502_assembler/kh6502.cpp)
+   target_link_libraries(kh6502 PUBLIC khparse)
 endif()

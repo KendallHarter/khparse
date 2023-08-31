@@ -1,0 +1,84 @@
+; BASIC header for SYS command
+; Put this in free storage before the system vectors
+.org $02F4
+   ; pointer to next line of basic
+   .byte $0B, $08
+   ; Line number 0
+   .byte 0, 0
+   ; Token for SYS
+   .byte $9E
+   ; 0x841 = 2113 in PETSCII
+   .byte $32, $31, $31, $33
+   ; end of line
+   .byte 0
+   ; end of program instead of next pointer
+   .byte 0, 0
+header_done:
+.assert header_done = 0x300
+
+   ; https://archive.org/details/Compute_s_Mapping_the_64_and_64C/page/n83/mode/2up
+   ; Vector to BASIC error message
+   .byte 0x8B, 0xE3
+   ; Vector to main BASIC loop
+   .byte 0x83, 0xA4
+   ; Vector to cruching
+   .byte 0x7C, 0xA5
+   ; vector to decrunching
+   .byte 0x1A, 0xA7
+   ; vector to routine that executes next BASIC token
+   .byte 0xE4, 0xA7
+   ; Arithmetic expression vector
+   .byte 0x85, 0xAE
+   ; register storage
+   .byte 0, 0, 0, 0
+   ; jump instruction for user function
+   .byte 0
+   ; address of usr command
+   .byte 0, 0
+unused:
+   .assert unused = 787
+   ; unused
+   .byte 0
+   ; Vector to IRQ interrupt
+   .byte 0x31, 0xEA
+   ; BRK instruction interrupt
+   .byte 0x66, 0xFE
+   ; Non maskable interrupt
+   .byte 0x47, 0xFE
+   ; Open routine
+   .byte 0x4A, 0xF3
+   ; Close routine
+   .byte 0x91, 0xF2
+   ; CHKIN routine
+   .byte 0x0E, 0xF2
+   ; CKOUT routine
+   .byte 0x50, 0xF2
+   ; CLRCHN routine
+   .byte 0x33, 0xF3
+   ; CHRIN Routine
+   .byte 0x57, 0xF1
+   ; CHROUT routine (which we want to overwrite!)
+chrout_routine:
+.assert chrout_routine = 0x326
+   .byte 0x34, 0x03
+   ; stop routine
+   .byte 0xED, 0xF6
+   ; getin routine
+   .byte 0x3E, 0xF1
+   ; CLALL routine
+   .byte 0x2F, 0xF3
+   ; user comamand
+   .byte 0, 0
+   ; load routine
+   .byte 0x9E, 0xF4
+   ; save routine
+   .byte 0xDD, 0xF5
+
+; This is no longer true since we're not assembling to 0x0801
+;.assert start_code = 2113
+.define border_color $D020
+start_code:
+.assert start_code = 0x0334
+   inc border_color
+   clc
+   bcc start_code

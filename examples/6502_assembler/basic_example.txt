@@ -1,0 +1,123 @@
+; BASIC header for SYS command
+.org $0801
+   ; pointer to next line of basic
+   .byte $0B, $08
+   ; Line number 0
+   .byte 0, 0
+   ; Token for SYS
+   .byte $9E
+   ; 2061 in PETSCII
+   .byte $32, $30, $36, $31
+   ; end of line
+   .byte 0
+   ; end of program instead of next pointer
+   .byte 0, 0
+; Code starts here; this is $080D = 2061
+.define screen 0x0400
+start_code:
+.assert start_code = 0x080D
+   ; Clear the screen
+   ldx #251
+   ; Space character
+   lda #32
+clear_loop:
+   ; screen - 1
+   sta 0x03FF, x
+   ; Here is where math would be really nice to have :>
+   ; (this is screen - 1 + 250, screen - 1 + 500, screen - 1 + 750)
+   sta 1273, x
+   sta 1523, x
+   sta 1773, x
+   dex
+   bne clear_loop
+
+screen_loop:
+   txa
+   sta screen, x
+   sta 0x500, x
+   sta 0x600, x
+   sta 0x700, x
+   inx
+   bne screen_loop
+
+.define raster_count $D012
+.define border_color $D020
+.define scroll_reg $D016
+.define joystick_2 56320
+.define background_color $D021
+loop:
+   ; Wait for raster line 220
+   lda #220
+   cmp raster_count
+   bne loop
+   ; Joystick port 2
+   lda joystick_2
+   ; Check for up
+   and #0b00000001
+   bne no_up
+   ; If up is pressed increase the background color
+   inc border_color
+   ; Wait until up is no longer pressed
+wait_for_up_release:
+   lda joystick_2
+   and #0b00000001
+   beq wait_for_up_release
+   bne loop
+no_up:
+   ; check for down press
+   lda joystick_2
+   and #0b00000010
+   bne no_down
+   dec border_color
+wait_for_down_release:
+   lda joystick_2
+   and #0b00000010
+   beq wait_for_down_release
+   bne loop
+no_down:
+   ; check for button
+   lda joystick_2
+   and #0b00010000
+   bne no_button
+   jsr change_screen_color
+   ; wait for button to be released
+wait_button_release:
+   lda joystick_2
+   and #%00010000
+   beq wait_button_release
+no_button:
+   ; check for left
+   lda joystick_2
+   and #0b00000100
+   bne no_left
+   dec background_color
+wait_left_release:
+   lda joystick_2
+   and #0b00000100
+   beq wait_left_release
+   bne loop
+no_left:
+   ; check for right
+   lda joystick_2
+   and #0b00001000
+   bne loop
+   inc background_color
+wait_right_release:
+   lda joystick_2
+   and #0b00001000
+   beq wait_right_release
+   jmp loop
+
+.define color_ram $D800
+change_screen_color:
+   ldx #250
+color_loop:
+   ; This is color_ram - 1 because the loop never happens with x=0
+   inc $D7FF, x
+   ; +250, +500, +750
+   inc 55545, x
+   inc 55795, x
+   inc 56045, x
+   dex
+   bne color_loop
+   rts
