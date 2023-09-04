@@ -470,7 +470,19 @@ private:
    [[no_unique_address]] Parser parser_;
    [[no_unique_address]] Callable callable_;
 
-   using value_type = nilify<decltype(callable_(parser_.parse(std::string_view{})->value))>;
+   static decltype(auto) invoke_callable(const Callable& to_call, auto&& value) noexcept
+   {
+      using arg_type = std::remove_cvref_t<decltype(value)>;
+      if constexpr (std::same_as<arg_type, nil_t>) {
+         return to_call();
+      }
+      else {
+         return to_call(static_cast<decltype(value)&&>(value));
+      }
+   }
+
+   using value_type
+      = nilify<decltype(invoke_callable(std::declval<Callable>(), parser_.parse(std::string_view{})->value))>;
 
 public:
    template<std::constructible_from<Parser> ArgParser, std::constructible_from<Callable> ArgCallable>
@@ -486,11 +498,11 @@ public:
       }
       else {
          if constexpr (std::same_as<value_type, nil_t>) {
-            callable_(result->value);
+            invoke_callable(callable_, result->value);
             return parse_success<nil_t>{nil, result->rest};
          }
          else {
-            return parse_success<value_type>{callable_(result->value), result->rest};
+            return parse_success<value_type>{invoke_callable(callable_, result->value), result->rest};
          }
       }
    }

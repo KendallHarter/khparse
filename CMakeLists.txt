@@ -75,6 +75,9 @@ if (KHPARSE_BUILD_EXAMPLES)
    add_executable(calculator2 examples/calculator2.cpp)
    target_link_libraries(calculator2 PUBLIC khparse)
 
+   add_executable(simple_kh6502 examples/simple_6502_assembler/kh6502.cpp)
+   target_link_libraries(simple_kh6502 PUBLIC khparse)
+
    add_executable(kh6502 examples/6502_assembler/kh6502.cpp)
    target_link_libraries(kh6502 PUBLIC khparse)
 endif()
