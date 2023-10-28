@@ -65,26 +65,6 @@ struct std::formatter<addr_mode, CharT> {
    }
 };
 
-std::ostream& operator<<(std::ostream& out, addr_mode mode) noexcept
-{
-   using am = addr_mode;
-   switch (mode) {
-   case am::implied: return out << "implied";
-   case am::accumulator: return out << "accumulator";
-   case am::immediate: return out << "immediate";
-   case am::zero_page: return out << "zero page";
-   case am::zero_page_x: return out << "zero page, x";
-   case am::zero_page_y: return out << "zero page, y";
-   case am::absolute: return out << "absolute";
-   case am::absolute_x: return out << "absolute, x";
-   case am::absolute_y: return out << "absolute, y";
-   case am::indirect: return out << "indirect";
-   case am::indexed_indirect: return out << "indexed indirect";
-   case am::indirect_indexed: return out << "indirect indexed";
-   }
-   return out;
-}
-
 // http://6502.org/users/obelisk/6502/reference.html
 // 0xFF is used for illegal combinations, third element is if it's a branch instruction
 // Note that for opcodes like ASL that have accumulator addressing, immediate is also used
@@ -171,6 +151,10 @@ struct assembler_state {
    std::uint64_t label_id = 0;
    std::uint64_t line_no = 1;
 
+   // TODO: Handle other formats such as CRT
+   std::array<std::uint8_t, 65536> code;
+   std::bitset<65536> code_written;
+
    // 32 bits as the range is non-inclusive
    std::uint32_t earliest_address = 0x10000;
    std::uint32_t last_address = 0;
@@ -182,6 +166,18 @@ struct assembler_state {
    {
       errored = true;
       std::cerr << "Error on line " << line_no << ":\n\t" << reason << '\n';
+   }
+
+   void emit_byte(std::uint8_t byte) noexcept
+   {
+      if (code_written[current_address]) {
+         std::cerr << "Fatal error on line " << line_no << ":\n\tAddress " << std::hex << current_address
+                   << " written to twice.\n";
+         std::exit(1);
+      }
+      code_written[current_address] = true;
+      code[current_address] = byte;
+      ++current_address;
    }
 };
 
@@ -369,7 +365,8 @@ int main()
                state.emit_error(std::format("Invalid addressing mode {} for opcode {}", mode_data.mode, op_name));
             }
             else {
-               ;
+               state.emit_byte(hex_array[op_index]);
+               // TODO: Emit bytes/mark unresolved labels based on mode_data
             }
          }
       }};

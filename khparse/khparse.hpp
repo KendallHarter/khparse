@@ -91,12 +91,12 @@ concept parser = requires(const T& parser, std::string_view v) {
 
 template<typename T>
 concept is_tuple = requires(T tuple) {
-   { []<typename... U>(std::tuple<U...>*){}(&tuple) };
+   { []<typename... U>(std::tuple<U...>*){}(std::addressof(tuple)) };
 };
 
 template<typename T>
 concept is_variant = requires(T var) {
-   { []<typename... U>(std::variant<U...>*){}(&var) };
+   { []<typename... U>(std::variant<U...>*){}(std::addressof(var)) };
 };
 // clang-format on
 
@@ -176,7 +176,7 @@ constexpr auto inline seq_ret_type = []() {
 struct always_fail {
    static auto parse(std::string_view v) noexcept -> parse_result<nil_t>
    {
-      return nonstd::make_unexpected(parse_error{v.begin()});
+      return nonstd::make_unexpected(parse_error{v.data()});
    }
 };
 
